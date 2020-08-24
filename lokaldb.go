@@ -24,7 +24,7 @@ type LokalDB struct {
 	FileName string
 }
 
-// ChunkData used to represent chunks of data
+// ChunkData represents the key-value chunks of data to be used as a result for slices of key-value data
 type ChunkData struct {
 	Key   string
 	Value []byte
@@ -40,7 +40,7 @@ var (
 	recLastIdxKey  []byte = []byte(`f0i5ZSQ15ARMLPZJn6zl`)
 )
 
-// Open opens the local database file
+// Open opens a local database file. It creates the file if it does not exist.
 func Open(file string) (*LokalDB, error) {
 	ld, err := bolt.Open(file,
 		0600,
@@ -52,7 +52,7 @@ func Open(file string) (*LokalDB, error) {
 	}, err
 }
 
-// Store stores data in the local database
+// Store inserts data in the local database. It will update records containing the same key with the current value.
 func (db *LokalDB) Store(bucket string, key string, data []byte) error {
 
 	if db.ldb == nil {
@@ -162,7 +162,7 @@ func (db *LokalDB) Store(bucket string, key string, data []byte) error {
 	return nil
 }
 
-// StoreOnce stores data in the local database in one go
+// StoreOnce inserts data in the local database in one go. It will update records containing the same key with the current value.
 func (db *LokalDB) StoreOnce(bucket string, data []ChunkData) error {
 
 	if db.ldb == nil {
@@ -278,7 +278,7 @@ func (db *LokalDB) StoreOnce(bucket string, data []ChunkData) error {
 	return nil
 }
 
-// Fetch fetches data from the local database
+// Fetch gets a single record from the local database with the provided key. If the record does not exist, it will return nil.
 func (db *LokalDB) Fetch(bucket string, key string) (data []byte, err error) {
 
 	if db.ldb == nil {
@@ -310,7 +310,7 @@ func (db *LokalDB) Fetch(bucket string, key string) (data []byte, err error) {
 	return
 }
 
-// Delete a record in the database
+// Delete a single record in the database that matches the provided key.
 func (db *LokalDB) Delete(bucket string, key string) error {
 
 	if db.ldb == nil {
@@ -370,7 +370,7 @@ func (db *LokalDB) Delete(bucket string, key string) error {
 	return nil
 }
 
-// DeleteOnce deletes data in the local database in one go
+// DeleteOnce remove records in the local database in one go from a supplied provided key.
 func (db *LokalDB) DeleteOnce(bucket string, key []string) error {
 
 	if len(key) == 0 {
@@ -439,7 +439,7 @@ func (db *LokalDB) DeleteOnce(bucket string, key []string) error {
 	return nil
 }
 
-// FetchChunkUp gets chunk of data starting from the bottom to top limited by max
+// FetchChunkUp gets a chunk of data starting from the bottom to top limited by max.
 func (db *LokalDB) FetchChunkUp(bucket string, max int, offset int) ([]ChunkData, error) {
 
 	if db.ldb == nil {
@@ -513,7 +513,7 @@ func (db *LokalDB) FetchChunkUp(bucket string, max int, offset int) ([]ChunkData
 	return chunk, nil
 }
 
-// FetchChunkDown gets chunk of data starting from the top to bottom limited by max
+// FetchChunkDown gets a chunk of data starting from the top to bottom limited by max.
 func (db *LokalDB) FetchChunkDown(bucket string, max int, offset int) ([]ChunkData, error) {
 
 	if db.ldb == nil {
@@ -586,7 +586,7 @@ func (db *LokalDB) FetchChunkDown(bucket string, max int, offset int) ([]ChunkDa
 	return chunk, nil
 }
 
-// FetchDelete fetches the data in the key and deletes it
+// FetchDelete gets the record with the provided key and deletes it.
 func (db *LokalDB) FetchDelete(bucket string, key string) ([]byte, error) {
 
 	if db.ldb == nil {
@@ -647,7 +647,7 @@ func (db *LokalDB) FetchDelete(bucket string, key string) ([]byte, error) {
 	return data, nil
 }
 
-// SliceUp fetches and deletes the item from bottom to top
+// SliceUp fetches and deletes a record from bottom to top.
 func (db *LokalDB) SliceUp(bucket string) (data []byte, err error) {
 
 	if db.ldb == nil {
@@ -724,7 +724,7 @@ func (db *LokalDB) SliceUp(bucket string) (data []byte, err error) {
 	return
 }
 
-// SliceDown fetches and deletes the item from top to bottom
+// SliceDown fetches and deletes a record from top to bottom.
 func (db *LokalDB) SliceDown(bucket string) (data []byte, err error) {
 
 	if db.ldb == nil {
@@ -797,7 +797,7 @@ func (db *LokalDB) SliceDown(bucket string) (data []byte, err error) {
 	return
 }
 
-// CutChunkUp gets chunk of data from the bucket from bottom to top in descending order and removes them.
+// CutChunkUp gets a chunk of data starting from bottom to top in descending order and removes them.
 func (db *LokalDB) CutChunkUp(bucket string, max int) ([]ChunkData, error) {
 
 	if db.ldb == nil {
@@ -896,7 +896,7 @@ func (db *LokalDB) CutChunkUp(bucket string, max int) ([]ChunkData, error) {
 
 }
 
-// CutChunkDown gets chunk of data from the bucket from top to bottom in ascending order and removes them.
+// CutChunkDown gets a chunk of data starting from top to bottom in ascending order and removes them.
 func (db *LokalDB) CutChunkDown(bucket string, max int) ([]ChunkData, error) {
 
 	if db.ldb == nil {
@@ -1032,7 +1032,7 @@ func (db *LokalDB) Count(bucket string) (int, error) {
 	return count, nil
 }
 
-// Close closes the local database
+// Close the local database
 func (db *LokalDB) Close() error {
 
 	if db.ldb != nil {
