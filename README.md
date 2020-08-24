@@ -167,7 +167,7 @@ Count records in the bucket
 ### Close() error
 Close the local database
 
-#Examples
+# Examples
 
 Please see more examples of using lokaldb in your projects on the ```lokaldb_test.go``` file.
 
