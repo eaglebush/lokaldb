@@ -2,7 +2,7 @@
 
 ***lokaldb*** is a wrapper around [bbolt](http://go.etcd.io/bbolt) key-value database to manage messaging data in a local database for the Go programming language.
 
-Its primary purpose is to be used persist messages if sending messages to queues like NATS fails.
+Its primary purpose is to persist messages if sending messages to queues like NATS fails.
 
 This is an initial version.
 

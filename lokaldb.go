@@ -184,8 +184,7 @@ func (db *LokalDB) StoreOnce(bucket string, data []ChunkData) error {
 	}
 	defer tx.Rollback()
 
-	b, err = tx.CreateBucketIfNotExists([]byte(bucket))
-	if err != nil {
+	if b, err = tx.CreateBucketIfNotExists([]byte(bucket)); err != nil {
 		return err
 	}
 
