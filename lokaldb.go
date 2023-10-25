@@ -13,7 +13,7 @@ import (
 // Errors
 var (
 	ErrLocalDatabaseNotYetOpened = errors.New(`local database not yet opened`)
-	ErrCorruptedInternalBucket   = errors.New(`corrupted internal bucket`)
+	ErrCorruptedInternalBucket   = errors.New(`empty or corrupted internal bucket`)
 	ErrBucketDoesNotExist        = errors.New(`bucket does not exist`)
 	ErrNoKeysSet                 = errors.New(`no keys set`)
 )
@@ -42,7 +42,8 @@ var (
 
 // Open opens a local database file. It creates the file if it does not exist.
 func Open(file string) (*LokalDB, error) {
-	ld, err := bolt.Open(file,
+	ld, err := bolt.Open(
+		file,
 		0600,
 		&bolt.Options{Timeout: 1 * time.Second},
 	)
@@ -60,11 +61,12 @@ func (db *LokalDB) Store(bucket string, key string, data []byte) error {
 	}
 
 	var (
-		err                         error
-		tx                          *bolt.Tx
-		b, inb                      *bolt.Bucket
-		lstidxb, fstidxb, ctb, keyb []byte
-		lstidx, fstidx, count       int
+		err    error
+		tx     *bolt.Tx
+		b, inb *bolt.Bucket
+		lstidxb, fstidxb,
+		ctb, keyb []byte
+		lstidx, count int
 	)
 
 	// Start a writable transaction.
@@ -74,20 +76,19 @@ func (db *LokalDB) Store(bucket string, key string, data []byte) error {
 	}
 	defer tx.Rollback()
 
-	b, err = tx.CreateBucketIfNotExists([]byte(bucket))
-	if err != nil {
+	keyb = []byte(key)
+	// Get specified buckets
+	// Also get internal buckets for the specified bucket
+	if b, err = tx.CreateBucketIfNotExists([]byte(bucket)); err != nil {
 		return err
 	}
-
-	keyb = []byte(key)
 
 	// Get internal bucket
 	if inb, err = tx.CreateBucketIfNotExists([]byte(intBucket + `-` + bucket)); err != nil {
 		return err
 	}
 
-	// Get last index
-	// check if the key exists. add last index if there is none
+	// Get last index used. Update if there is none
 	if lstidxb = inb.Get(recLastIdxKey); lstidxb == nil {
 		lstidxb = []byte(`0`)
 		if err = inb.Put(recLastIdxKey, lstidxb); err != nil {
@@ -95,23 +96,13 @@ func (db *LokalDB) Store(bucket string, key string, data []byte) error {
 		}
 	}
 
-	lstidx, _ = strconv.Atoi(string(lstidxb))
-
-	if b.Get(lstidxb) == nil {
-		lstidx++
-		lstidxb = []byte(strconv.Itoa(lstidx))
-	}
-
-	// Get first index
-	// just to store value
-	// if it is has not been set
+	// Get first index used. Update if there is none
 	if fstidxb = inb.Get(recFirstIdxKey); fstidxb == nil {
-		fstidxb = []byte(`0`)
+		fstidxb = []byte(`1`)
 		if err = inb.Put(recFirstIdxKey, fstidxb); err != nil {
 			return err
 		}
 	}
-	fstidx, _ = strconv.Atoi(string(fstidxb))
 
 	// Get bucket record count
 	if ctb = inb.Get(recCntKey); ctb == nil {
@@ -119,33 +110,13 @@ func (db *LokalDB) Store(bucket string, key string, data []byte) error {
 	}
 	count, _ = strconv.Atoi(string(ctb))
 
-	// store
+	// Check the if key exists in the main bucket
+	// This will be used for index update
+	kx := b.Get(keyb) != nil
+
+	// Store the value
 	if err = b.Put(keyb, data); err != nil {
 		return err
-	}
-
-	// - Mark the record index with the provided key
-	// - Use the provided key as key and set the record index
-	// - Update the last index
-	if err = inb.Put(lstidxb, keyb); err != nil {
-		return err
-	}
-
-	if err = inb.Put(keyb, lstidxb); err != nil {
-		return err
-	}
-
-	if err = inb.Put(recLastIdxKey, lstidxb); err != nil {
-		return err
-	}
-
-	// If first index is zero, set to 1
-	if fstidx == 0 {
-		fstidx = 1
-		fstidxb = []byte(strconv.Itoa(fstidx))
-		if err = inb.Put(recFirstIdxKey, fstidxb); err != nil {
-			return err
-		}
 	}
 
 	// Record last record count
@@ -153,6 +124,27 @@ func (db *LokalDB) Store(bucket string, key string, data []byte) error {
 	ctb = []byte(strconv.Itoa(count))
 	if err = inb.Put(recCntKey, ctb); err != nil {
 		return err
+	}
+
+	if !kx {
+		// If the last index key does not exist in the internal
+		// bucket, it will be created
+		// 1. Mark the record index with the provided key
+		// 2. Use the provided key as key and set the record index
+		// 3. Update the last index
+		lstidx, _ = strconv.Atoi(string(lstidxb))
+		lstidx++
+		lstidxb = []byte(strconv.Itoa(lstidx))
+
+		if err = inb.Put(lstidxb, keyb); err != nil {
+			return err
+		}
+		if err = inb.Put(keyb, lstidxb); err != nil {
+			return err
+		}
+		if err = inb.Put(recLastIdxKey, lstidxb); err != nil {
+			return err
+		}
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -165,113 +157,14 @@ func (db *LokalDB) Store(bucket string, key string, data []byte) error {
 // StoreOnce inserts data in the local database in one go. It will update records containing the same key with the current value.
 func (db *LokalDB) StoreOnce(bucket string, data []ChunkData) error {
 
-	if db.ldb == nil {
-		return ErrLocalDatabaseNotYetOpened
-	}
-
 	var (
-		tx                          *bolt.Tx
-		err                         error
-		b, inb                      *bolt.Bucket
-		keyb, botidxb, topidxb, ctb []byte
-		lstidx, fstidx, c, count    int
+		err error
 	)
 
-	// Start a writable transaction.
-	tx, err = db.ldb.Begin(true)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if b, err = tx.CreateBucketIfNotExists([]byte(bucket)); err != nil {
-		return err
-	}
-
-	// Get internal bucket
-	if inb, err = tx.CreateBucketIfNotExists([]byte(intBucket + `-` + bucket)); err != nil {
-		return err
-	}
-
-	// Get last index
-	// check if the key exists. add last index if there is none
-	if botidxb = inb.Get(recLastIdxKey); botidxb == nil {
-		botidxb = []byte(`0`)
-		if err = inb.Put(recLastIdxKey, botidxb); err != nil {
-			return err
-		}
-	}
-
-	lstidx, _ = strconv.Atoi(string(botidxb))
-
-	if b.Get(botidxb) == nil {
-		lstidx++
-		botidxb = []byte(strconv.Itoa(lstidx))
-	}
-
-	// Get first index
-	// just to store value
-	// if it is has not been set
-	if topidxb = inb.Get(recFirstIdxKey); topidxb == nil {
-		topidxb = []byte(`0`)
-		if err = inb.Put(recFirstIdxKey, topidxb); err != nil {
-			return err
-		}
-	}
-
-	// Get bucket record count
-	if ctb = inb.Get(recCntKey); ctb == nil {
-		ctb = []byte(`0`)
-	}
-	count, _ = strconv.Atoi(string(ctb))
-
 	for _, kv := range data {
-
-		keyb = []byte(kv.Key)
-
-		// store
-		if err = b.Put(keyb, kv.Value); err != nil {
+		if err = db.Store(bucket, kv.Key, kv.Value); err != nil {
 			return err
 		}
-
-		// - Mark the record index with the provided key
-		// - Use the provided key as key and set the record index
-		// - Update the last index
-		if err = inb.Put(botidxb, keyb); err != nil {
-			return err
-		}
-
-		if err = inb.Put(keyb, botidxb); err != nil {
-			return err
-		}
-
-		if err = inb.Put(recLastIdxKey, botidxb); err != nil {
-			return err
-		}
-
-		lstidx++
-		c++
-		botidxb = []byte(strconv.Itoa(lstidx))
-	}
-
-	fstidx, _ = strconv.Atoi(string(topidxb))
-	if c > 0 && fstidx == 0 {
-		fstidx++
-		topidxb = []byte(strconv.Itoa(fstidx))
-		if err = inb.Put(recFirstIdxKey, topidxb); err != nil {
-			return err
-		}
-	}
-
-	// Record last record count
-	count += c
-	ctb = []byte(strconv.Itoa(count))
-	if err = inb.Put(recCntKey, ctb); err != nil {
-		return err
-	}
-
-	if err = tx.Commit(); err != nil {
-		return err
 	}
 
 	return nil

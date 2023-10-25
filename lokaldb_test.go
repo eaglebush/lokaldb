@@ -361,6 +361,29 @@ func TestStoreDeleteOnce(t *testing.T) {
 
 		log.Printf("Key %s,Value %s\n", kv.Key, string(kv.Value))
 	}
+}
+
+func TestStore(t *testing.T) {
+	var (
+		err error
+		db  *LokalDB
+	)
+
+	db, err = Open(`test.db`)
+	if err != nil {
+		log.Fatalf("%e", err)
+	}
+	defer db.Close()
+
+	cnt := 0
+	for {
+		if cnt > 10 {
+			break
+		}
+		db.Store(`default`, `arkenstone-trader.trader.trader`, []byte("1"))
+		db.Store(`default`, `arkenstone-trader.trader.trader-address`, []byte("2"))
+		cnt += 1
+	}
 
 }
 
